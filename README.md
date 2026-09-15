@@ -60,6 +60,8 @@ entrega_analisador_lexico/
 - [x] Reconhecimento de constantes de caractere (`CHARCONST`)
 - [x] Reconhecimento de constantes de string (`STRINGCONST`)
 - [x] Conversao de sequencias de escape: `\n`, `\t`, `\\`, `\"`, `\'`, `\0`
+- [x] Tabela hash de strings para reutilizar lexemas iguais, com comparacao por
+      tamanho e bytes para preservar valores que contenham `\0`
 - [x] Reconhecimento de operadores aritmeticos, relacionais e logicos
 - [x] Reconhecimento de delimitadores: `;`, `,`, `(`, `)`, `{`, `}`, `[`, `]`
 - [x] Tratamento de comentarios de linha (`//`) e de bloco (`/* ... */`)
@@ -120,6 +122,7 @@ Arquivos de teste:
 - `tests/literais.mc`
 - `tests/operadores.mc`
 - `tests/erros.mc`
+- `tests/recuperacao.mc`
 
 ## Autores
 

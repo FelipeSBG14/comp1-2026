@@ -45,6 +45,12 @@ typedef struct {
     char *error_msg;
 } YYSTYPE;
 
+typedef struct StringEntry {
+    char *text;
+    size_t length;
+    struct StringEntry *next;
+} StringEntry;
+
 YYSTYPE microc_yylval = { NULL, 0, NULL };
 
 extern char *yytext;
@@ -54,13 +60,16 @@ int linha_atual = 1;
 int linha_token = 1;
 
 #define LITERAL_MAX 4096
+#define STRING_TABLE_SIZE 211
 
 static char literal_buffer[LITERAL_MAX];
 static size_t literal_len = 0;
-static int linha_literal = 1;
 static int char_quantidade = 0;
+static int literal_excedeu_tamanho = 0;
 static int tem_ultimo_token = 0;
 static TokenType ultimo_token = END_OF_FILE;
+
+static StringEntry *string_table[STRING_TABLE_SIZE] = { NULL };
 
 static char *duplica_n(const char *texto, size_t tamanho) {
     char *copia = (char *)malloc(tamanho + 1);
@@ -78,16 +87,64 @@ static char *duplica_texto(const char *texto) {
 }
 
 static void limpa_yylval(void) {
-    free(microc_yylval.symbol);
     free(microc_yylval.error_msg);
     microc_yylval.symbol = NULL;
     microc_yylval.symbol_len = 0;
     microc_yylval.error_msg = NULL;
 }
 
+static size_t hash_texto(const char *texto, size_t tamanho) {
+    size_t i;
+    size_t hash = (size_t)2166136261u;
+
+    for (i = 0; i < tamanho; i++) {
+        hash ^= (unsigned char)texto[i];
+        hash *= (size_t)16777619u;
+    }
+    return hash % STRING_TABLE_SIZE;
+}
+
+static char *internar_texto(const char *texto, size_t tamanho) {
+    size_t indice = hash_texto(texto, tamanho);
+    StringEntry *entrada = string_table[indice];
+
+    while (entrada != NULL) {
+        if (entrada->length == tamanho &&
+            memcmp(entrada->text, texto, tamanho) == 0) {
+            return entrada->text;
+        }
+        entrada = entrada->next;
+    }
+
+    entrada = (StringEntry *)malloc(sizeof(StringEntry));
+    if (entrada == NULL) {
+        fprintf(stderr, "Erro: memoria insuficiente\n");
+        exit(1);
+    }
+    entrada->text = duplica_n(texto, tamanho);
+    entrada->length = tamanho;
+    entrada->next = string_table[indice];
+    string_table[indice] = entrada;
+    return entrada->text;
+}
+
+static void libera_tabela_de_strings(void) {
+    size_t i;
+
+    for (i = 0; i < STRING_TABLE_SIZE; i++) {
+        StringEntry *entrada = string_table[i];
+        while (entrada != NULL) {
+            StringEntry *proxima = entrada->next;
+            free(entrada->text);
+            free(entrada);
+            entrada = proxima;
+        }
+        string_table[i] = NULL;
+    }
+}
+
 static void guarda_texto(const char *texto, size_t tamanho) {
-    free(microc_yylval.symbol);
-    microc_yylval.symbol = duplica_n(texto, tamanho);
+    microc_yylval.symbol = internar_texto(texto, tamanho);
     microc_yylval.symbol_len = tamanho;
 }
 
@@ -103,11 +160,12 @@ static void guarda_erro(const char *mensagem) {
 static void reinicia_literal(void) {
     literal_len = 0;
     char_quantidade = 0;
+    literal_excedeu_tamanho = 0;
 }
 
 static void adiciona_literal(char caractere) {
     if (literal_len + 1 >= LITERAL_MAX) {
-        guarda_erro("Literal excede o tamanho maximo");
+        literal_excedeu_tamanho = 1;
         return;
     }
     literal_buffer[literal_len++] = caractere;
@@ -322,7 +380,6 @@ ALFANUM     [a-zA-Z0-9_]
                     }
 
 "'"                 {
-                        linha_literal = linha_atual;
                         reinicia_literal();
                         BEGIN(CHAR_LITERAL);
                     }
@@ -330,38 +387,43 @@ ALFANUM     [a-zA-Z0-9_]
                         if (char_quantidade == 1) {
                             guarda_literal();
                             BEGIN(INITIAL);
-                            return registra_token(CHARCONST, linha_literal);
+                            return registra_token(CHARCONST, linha_atual);
                         }
                         guarda_erro(char_quantidade == 0
                                     ? "Constante de caractere vazia"
                                     : "Constante de caractere invalida");
                         BEGIN(INITIAL);
-                        return registra_erro(linha_literal);
+                        return registra_erro(linha_atual);
                     }
 <CHAR_LITERAL>\\[nt\\\"\'0] {
                         adiciona_escape_literal(yytext[1]);
                         char_quantidade++;
                     }
+<CHAR_LITERAL>\\    {
+                        guarda_erro("Sequencia de escape invalida");
+                        BEGIN(CHAR_ERROR);
+                        return registra_erro(linha_atual);
+                    }
 <CHAR_LITERAL>\\.   {
                         guarda_erro("Sequencia de escape invalida");
                         BEGIN(CHAR_ERROR);
-                        return registra_erro(linha_literal);
+                        return registra_erro(linha_atual);
                     }
 <CHAR_LITERAL>\n    {
                         linha_atual++;
                         guarda_erro("Constante de caractere nao terminada");
                         BEGIN(INITIAL);
-                        return registra_erro(linha_literal);
+                        return registra_erro(linha_atual);
                     }
 <CHAR_LITERAL>\0    {
                         guarda_erro("Constante de caractere contem caractere nulo");
-                        BEGIN(INITIAL);
-                        return registra_erro(linha_literal);
+                        BEGIN(CHAR_ERROR);
+                        return registra_erro(linha_atual);
                     }
 <CHAR_LITERAL><<EOF>> {
                         guarda_erro("EOF em caractere");
                         BEGIN(INITIAL);
-                        return registra_erro(linha_literal);
+                        return registra_erro(linha_atual);
                     }
 <CHAR_LITERAL>[^\\'\n\0] {
                         adiciona_literal(yytext[0]);
@@ -376,38 +438,47 @@ ALFANUM     [a-zA-Z0-9_]
 <CHAR_ERROR>.       { }
 
 \"                  {
-                        linha_literal = linha_atual;
                         reinicia_literal();
                         BEGIN(STRING);
                     }
 <STRING>\"          {
+                        if (literal_excedeu_tamanho) {
+                            guarda_erro("Literal excede o tamanho maximo");
+                            BEGIN(STRING_ERROR);
+                            return registra_erro(linha_atual);
+                        }
                         guarda_literal();
                         BEGIN(INITIAL);
-                        return registra_token(STRINGCONST, linha_literal);
+                        return registra_token(STRINGCONST, linha_atual);
                     }
 <STRING>\\[nt\\\"0] {
                         adiciona_escape_literal(yytext[1]);
                     }
+<STRING>\\          {
+                        guarda_erro("Sequencia de escape invalida");
+                        BEGIN(STRING_ERROR);
+                        return registra_erro(linha_atual);
+                    }
 <STRING>\\.         {
                         guarda_erro("Sequencia de escape invalida");
                         BEGIN(STRING_ERROR);
-                        return registra_erro(linha_literal);
+                        return registra_erro(linha_atual);
                     }
 <STRING>\n          {
                         linha_atual++;
                         guarda_erro("String nao terminada");
                         BEGIN(INITIAL);
-                        return registra_erro(linha_literal);
+                        return registra_erro(linha_atual);
                     }
 <STRING>\0          {
                         guarda_erro("String contem caractere nulo");
-                        BEGIN(INITIAL);
-                        return registra_erro(linha_literal);
+                        BEGIN(STRING_ERROR);
+                        return registra_erro(linha_atual);
                     }
 <STRING><<EOF>>     {
                         guarda_erro("EOF em string");
                         BEGIN(INITIAL);
-                        return registra_erro(linha_literal);
+                        return registra_erro(linha_atual);
                     }
 <STRING>[^\\\"\n\0]+ {
                         adiciona_texto_literal(yytext, yyleng);
@@ -490,6 +561,7 @@ int main(int argc, char **argv) {
     }
 
     limpa_yylval();
+    libera_tabela_de_strings();
     fclose(arquivo_fonte);
     return 0;
 }

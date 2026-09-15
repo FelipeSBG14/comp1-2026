@@ -9,7 +9,8 @@ TESTS = tests/test.mc \
 	tests/palavras_reservadas.mc \
 	tests/literais.mc \
 	tests/operadores.mc \
-	tests/erros.mc
+	tests/erros.mc \
+	tests/recuperacao.mc
 
 .PHONY: all test clean
 
@@ -27,6 +28,7 @@ test: $(LEXER)
 	./$(LEXER) tests/literais.mc
 	./$(LEXER) tests/operadores.mc
 	./$(LEXER) tests/erros.mc
+	./$(LEXER) tests/recuperacao.mc
 
 clean:
 	rm -f $(LEXER) $(LEXER).exe $(GEN_SRC)

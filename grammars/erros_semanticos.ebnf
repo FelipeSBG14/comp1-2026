@@ -1,0 +1,7 @@
+TOKENS
+  ID = /[a-zA-Z_][a-zA-Z0-9_]*/ ;
+  SKIP = /[ \t\r\n]+/ ;
+
+RULES
+  inicio = ausente ID ;
+  ciclo = ciclo ID ;

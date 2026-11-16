@@ -1,0 +1,13 @@
+*.o
+gerador
+gerador.exe
+lexer
+lexer.exe
+lex.yy.c
+microc_scanner.c
+parser
+parser.exe
+parser_*.c
+parser_*.h
+parser_*.exe
+tests_tp2/.build/

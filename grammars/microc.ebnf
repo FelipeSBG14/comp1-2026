@@ -1,0 +1,62 @@
+(* Micro C fatorada para analise descendente LL(1). *)
+TOKENS
+  MAIN = /main/ ;
+  IF = /if/ ;
+  ELSE = /else/ ;
+  FOR = /for/ ;
+  RETURN = /return/ ;
+  INT = /int/ ;
+  CHAR = /char/ ;
+  PRINT = /print/ ;
+  EQ = /==/ ;
+  NEQ = /!=/ ;
+  LEQ = /<=/ ;
+  GEQ = />=/ ;
+  AND = /&&/ ;
+  OR = /\|\|/ ;
+  PLUS = /\+/ ;
+  MINUS = /-/ ;
+  MUL = /\*/ ;
+  DIV = /\// ;
+  MOD = /%/ ;
+  LT = /</ ;
+  GT = />/ ;
+  NOT = /!/ ;
+  ASSIGN = /=/ ;
+  SEMICOLON = /;/ ;
+  COMMA = /,/ ;
+  LPAREN = /\(/ ;
+  RPAREN = /\)/ ;
+  LBRACE = /\{/ ;
+  RBRACE = /\}/ ;
+  LBRACKET = /\[/ ;
+  RBRACKET = /\]/ ;
+  INTEGERCONST = /[0-9]+/ ;
+  CHARCONST = /'([^'\\\n]|\\[nt\\'0])'/ ;
+  STRINGCONST = /"([^"\\\n]|\\[nt\\"0])*"/ ;
+  ID = /[a-zA-Z_][a-zA-Z0-9_]*/ ;
+  SKIP = /([ \t\r\n]+|\/\/[^\n]*|\/\*([^*]|\*+[^*\/])*\*+\/)+/ ;
+
+RULES
+  programa = INT MAIN LPAREN RPAREN bloco ;
+  bloco = LBRACE { item_bloco } RBRACE ;
+  item_bloco = declaracao | comando ;
+  declaracao = tipo ID [ ASSIGN expressao ] SEMICOLON ;
+  tipo = INT | CHAR ;
+  comando = atribuicao | retorno | impressao | selecao | repeticao_for | bloco ;
+  atribuicao = atribuicao_interna SEMICOLON ;
+  atribuicao_interna = ID [ LBRACKET expressao RBRACKET ] ASSIGN expressao ;
+  retorno = RETURN [ expressao ] SEMICOLON ;
+  impressao = PRINT LPAREN expressao RPAREN SEMICOLON ;
+  selecao = IF LPAREN expressao RPAREN comando [ ELSE comando ] ;
+  repeticao_for = FOR LPAREN atribuicao_interna SEMICOLON expressao SEMICOLON
+                  atribuicao_interna RPAREN comando ;
+  expressao = conjuncao { OR conjuncao } ;
+  conjuncao = igualdade { AND igualdade } ;
+  igualdade = relacional { ( EQ | NEQ ) relacional } ;
+  relacional = aditiva [ ( LEQ | GEQ | LT | GT ) aditiva ] ;
+  aditiva = termo { ( PLUS | MINUS ) termo } ;
+  termo = fator { ( MUL | DIV | MOD ) fator } ;
+  fator = INTEGERCONST | CHARCONST | STRINGCONST |
+          ID [ LBRACKET expressao RBRACKET ] |
+          LPAREN expressao RPAREN | MINUS fator | NOT fator ;

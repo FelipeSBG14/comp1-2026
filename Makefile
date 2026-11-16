@@ -1,34 +1,40 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -pedantic
+CFLAGS = -Wall -Wextra -Werror -std=c89 -pedantic
 FLEX ?= flex
 
-LEXER = lexer
-FLEX_SRC = microc.flex
-GEN_SRC = lex.yy.c
-TESTS = tests/test.mc \
-	tests/palavras_reservadas.mc \
-	tests/literais.mc \
-	tests/operadores.mc \
-	tests/erros.mc \
-	tests/recuperacao.mc
+GERADOR = gerador
+FONTES = src/main.c src/apoio.c src/ebnf_lexer.c src/ebnf_parser.c \
+	src/verificacao.c src/conjuntos.c src/ll1.c src/regex.c src/codegen.c
+OBJETOS = $(FONTES:.c=.o)
 
-.PHONY: all test clean
+.PHONY: all test test-tp1 microc-parser microc-parser-tp1 clean
 
-all: $(LEXER)
+all: $(GERADOR)
 
-$(LEXER): $(GEN_SRC)
-	$(CC) $(CFLAGS) $(GEN_SRC) -o $(LEXER)
+$(GERADOR): $(OBJETOS)
+	$(CC) $(CFLAGS) $(OBJETOS) -o $(GERADOR)
 
-$(GEN_SRC): $(FLEX_SRC)
-	$(FLEX) $(FLEX_SRC)
+src/%.o: src/%.c src/gerador.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
-test: $(LEXER)
-	./$(LEXER) tests/test.mc
-	./$(LEXER) tests/palavras_reservadas.mc
-	./$(LEXER) tests/literais.mc
-	./$(LEXER) tests/operadores.mc
-	./$(LEXER) tests/erros.mc
-	./$(LEXER) tests/recuperacao.mc
+src/codegen.o: src/runtime_tokens.inc
+
+test: $(GERADOR)
+	sh ./tests_tp2/executar_testes.sh
+
+microc-parser: $(GERADOR)
+	./$(GERADOR) -o parser_microc grammars/microc.ebnf
+	$(CC) $(CFLAGS) parser_microc.c -o parser_microc
+
+microc-parser-tp1: $(GERADOR)
+	./$(GERADOR) -o parser_microc grammars/microc.ebnf
+	$(FLEX) -o microc_scanner.c src/microc_scanner.flex
+	$(CC) $(CFLAGS) -DSCANNER_EXTERNO parser_microc.c microc_scanner.c -o parser_microc
+
+test-tp1: microc.flex
+	$(FLEX) microc.flex
+	$(CC) -Wall -Wextra -std=c89 -pedantic lex.yy.c -o lexer
 
 clean:
-	rm -f $(LEXER) $(LEXER).exe $(GEN_SRC)
+	rm -f $(GERADOR) $(GERADOR).exe $(OBJETOS) parser.c parser.h parser parser.exe
+	rm -f parser_*.c parser_*.h parser_* parser_*.exe microc_scanner.c
